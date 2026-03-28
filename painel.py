@@ -3,7 +3,6 @@ from core.config import setup_page
 from core.state import init_state
 import sidebar
 
-# Importação correta conforme a pasta /tabs do seu GitHub
 from tabs import nav_tab
 from tabs import chat_tab
 from tabs import bra_tab
@@ -13,10 +12,14 @@ from tabs import ent_tab
 setup_page()
 init_state()
 
-# 2. Renderiza a Sidebar (Integrada ao Painel)
+# 2. Garante que ai_state existe (caso init_state não cubra)
+if "ai_state" not in st.session_state:
+    st.session_state.ai_state = "idle"
+
+# 3. Renderiza a Sidebar (com avatar)
 sidebar.render()
 
-# 3. Controle de Abas
+# 4. Controle de Abas
 aba = st.tabs(["📂 Navegação", "💬 Chat", "🛠️ Administração", "🧬 Entropia"])
 
 with aba[0]:
