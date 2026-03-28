@@ -40,6 +40,12 @@ Localização: Estritamente em C:\Alana.
 ## 🧬 Fonte da Verdade
 - Toda lógica de comportamento deve respeitar o arquivo `alana_core.txt`.
 - Não assumir a existência de pastas como "modulos" ou nomes de arquivos em português fora da pasta raiz, a menos que explicitado neste README.
+---
+## 🚩 Último Ponto de Sucesso (28/03/2026)
+- **Navegação:** Totalmente funcional de C: até F:.
+- **Sincronização:** Sidebar controla o `drive_selector` e Nav_Tab obedece via `st.session_state`.
+- **Mecânica:** Uso obrigatório de `st.rerun()` e `on_click` para evitar cliques mortos em subpastas.
+- **Hardware:** Janela Azul (PowerShell) operacional na aba Bra_Tab.
 
 ---
 *Projeto Original em C:\Alana*
