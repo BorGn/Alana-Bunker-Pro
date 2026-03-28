@@ -1,23 +1,35 @@
 import streamlit as st
+import subprocess
 
 def render():
     st.header("🛠️ Administração do Bunker")
     
-    col1, col2 = st.columns(2)
+    # --- BRAÇO OPERACIONAL: OPEN-INTERPRETER EM POWERSHELL ---
+    st.subheader("🦾 Comando Open Interpreter (PowerShell)")
+    tarefa = st.text_area("Ordem direta para o hardware:", placeholder="Digite o comando para o Interpreter...")
     
-    with col1:
-        st.subheader("Estado do Sistema")
-        st.write(f"Modelo Ativo: {st.session_state.get('alana_model', 'Não definido')}")
-        if st.button("Reiniciar Memória (Chat)"):
-            st.session_state.messages = []
-            st.rerun()
+    if st.button("Executar via Janela Azul (PowerShell)"):
+        if tarefa:
+            try:
+                # Comando que abre o PowerShell, executa o interpreter e NÃO fecha a janela (-NoExit)
+                ps_command = f'interpreter --task "{tarefa}"'
+                subprocess.Popen([
+                    "powershell", 
+                    "-NoExit", 
+                    "-Command", 
+                    ps_command
+                ], creationflags=subprocess.CREATE_NEW_CONSOLE)
+                
+                st.success("✅ PowerShell disparado com Open-Interpreter.")
+            except Exception as e:
+                st.error(f"Erro ao invocar PowerShell: {e}")
+        else:
+            st.warning("⚠️ O campo de tarefa está vazio.")
 
-    with col2:
-        st.subheader("Diretrizes da Alana")
-        # Aqui ele lê o coração do projeto
-        try:
-            with open("alana_core.txt", "r", encoding="utf-8") as f:
-                core_content = f.read()
-            st.text_area("Coração (alana_core.txt):", value=core_content, height=200)
-        except Exception as e:
-            st.error("Não foi possível carregar o alana_core.txt")
+    st.divider()
+    
+    # --- MONITORAMENTO DE ESTADO ---
+    st.write(f"Sessão ativa: {st.session_state.get('alana_model', 'Padrão')}")
+    if st.button("Limpar Histórico do Chat"):
+        st.session_state.messages = []
+        st.rerun()
