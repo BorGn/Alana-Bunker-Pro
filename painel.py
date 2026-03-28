@@ -1,28 +1,32 @@
 import streamlit as st
-from modulos import aba_navegacao, aba_inspecao, aba_organizacao
+from core.config import setup_page
+from core.state import init_state
+import sidebar
 
-# 1. Definições de Funções (QUE FALTAM NO SEU CÓDIGO ATUAL)
-def chamar_alana_api(prompt):
-    pass # Coloque aqui sua lógica de API
+# Importação correta conforme a pasta /tabs do seu GitHub
+from tabs import nav_tab
+from tabs import chat_tab
+from tabs import bra_tab
+from tabs import ent_tab
 
-def ler_diretrizes_core():
-    pass # Coloque aqui sua lógica de leitura do TXT
+# 1. Inicialização
+setup_page()
+init_state()
 
-EXTENSOES_TEXTO = [".py", ".txt", ".md"]
+# 2. Renderiza a Sidebar (Integrada ao Painel)
+sidebar.render()
 
-# 2. Configuração
-st.set_page_config(page_title="Alana Bunker", layout="wide")
+# 3. Controle de Abas
+aba = st.tabs(["📂 Navegação", "💬 Chat", "🛠️ Administração", "🧬 Entropia"])
 
-# 3. Definição das Abas
-# Note: Usei os mesmos nomes que você colou na parte de baixo
-tab_nav, tab_insp, tab_org = st.tabs(["📂 Navegação", "🔬 Inspeção Técnica", "🧬 Entropia"])
+with aba[0]:
+    nav_tab.render()
 
-with tab_nav:
-    aba_navegacao.renderizar()
+with aba[1]:
+    chat_tab.render()
 
-with tab_insp:
-    aba_inspecao.renderizar(chamar_alana_api, ler_diretrizes_core, EXTENSOES_TEXTO)
+with aba[2]:
+    bra_tab.render()
 
-with tab_org:
-    st.header("🧬 Varredura de Entropia")
-    aba_organizacao.renderizar(chamar_alana_api, ler_diretrizes_core)
+with aba[3]:
+    ent_tab.render()
