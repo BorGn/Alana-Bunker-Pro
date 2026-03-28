@@ -1,17 +1,20 @@
 import streamlit as st
+import os
 
 def render():
     with st.sidebar:
         st.title("🛡️ Alana Bunker")
         st.divider()
         
-        # Exemplo de controle global que as abas vão usar
-        st.subheader("Configurações de IA")
-        modelo = st.selectbox(
-            "Selecione a Personalidade:",
-            ["Analista Técnica", "Desenvolvedora", "Segurança Cibernética"],
-            key="alana_model" # Isso salva no session_state automaticamente
-        )
+        # Seletor de Unidade (O que estava no sidebar e sumiu)
+        unidades = ["C:\\", "D:\\", "E:\\"]
+        drive_padrao = unidades.index("C:\\") if "C:\\" in unidades else 0
         
+        escolha_drive = st.selectbox("⚓ Selecionar Unidade:", unidades, index=drive_padrao)
+        
+        # Atualiza o estado global para a aba de navegação usar
+        if "caminho_atual" not in st.session_state or st.sidebar.button("Resetar para Raiz"):
+            st.session_state.caminho_atual = escolha_drive
+            
         st.divider()
-        st.info("Status: Bunker Operacional")
+        st.info(f"📍 GPS: {st.session_state.caminho_atual}")
