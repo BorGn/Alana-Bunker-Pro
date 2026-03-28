@@ -1,11 +1,20 @@
-import os
 import streamlit as st
 
 def init_state():
-    if 'dir_atual' not in st.session_state:
-        st.session_state.dir_atual = os.path.normpath(os.getcwd())
-    if 'arquivo_foco' not in st.session_state:
-        st.session_state.arquivo_foco = None
-    if 'mapa_recursivo' not in st.session_state:
-        st.session_state.mapa_recursivo = None
+    """Inicializa as variáveis de estado global do Bunker."""
+    
+    # Histórico do Chat (Fundamental para a aba chat_tab)
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
 
+    # Configurações da Alana (Selecionadas no sidebar)
+    if "alana_model" not in st.session_state:
+        st.session_state.alana_model = "Analista Técnica"
+
+    # Controle de Autenticação/Status
+    if "bunker_unlocked" not in st.session_state:
+        st.session_state.bunker_unlocked = False
+
+    # Diretrizes do Core (Cache para não ler o TXT toda hora)
+    if "core_rules" not in st.session_state:
+        st.session_state.core_rules = ""
