@@ -14,6 +14,24 @@ Antes de qualquer análise, leia esta estrutura. Este é um NOVO PROJETO, indepe
 3. A barra lateral é renderizada por `sidebar.py`.
 4. As abas são chamadas pelos módulos contidos em `/tabs`.
 
+# 🛡️ Alana Bunker Pro - v1.0
+
+### ⚠️ DIRETRIZ CRÍTICA DE ARQUITETURA
+Este projeto utiliza uma estrutura modular estrita. A verdade absoluta reside nestes arquivos:
+
+## 📂 Organização
+- `painel.py`: Ponto de entrada. Gerencia a renderização das abas.
+- `sidebar.py`: **Módulo Crítico**. Funciona em conjunto com o painel para renderizar controles laterais.
+- `/core`: Configurações (`config.py`) e Estado Global (`state.py`).
+- `/tabs`: Conteúdo específico de cada aba do painel.
+
+## ⚙️ Fluxo de Integração
+O `painel.py` importa e executa `sidebar.render()`. 
+Nenhuma lógica de navegação ou configuração deve ignorar a existência do arquivo `sidebar.py` na raiz.
+
+---
+*Origem: C:\Alana*
+
 ## 🧬 Fonte da Verdade
 - Toda lógica de comportamento deve respeitar o arquivo `alana_core.txt`.
 - Não assumir a existência de pastas como "modulos" ou nomes de arquivos em português fora da pasta raiz, a menos que explicitado neste README.
