@@ -46,6 +46,17 @@ Localização: Estritamente em C:\Alana.
 - **Sincronização:** Sidebar controla o `drive_selector` e Nav_Tab obedece via `st.session_state`.
 - **Mecânica:** Uso obrigatório de `st.rerun()` e `on_click` para evitar cliques mortos em subpastas.
 - **Hardware:** Janela Azul (PowerShell) operacional na aba Bra_Tab.
+## 🚩 Ponto de Controle Estável (28/03/2026)
+**Status:** Operacional e Sincronizado.
+
+### ✅ Conquistas de Infraestrutura:
+1. **Navegação Real:** `tabs/nav_tab.py` utiliza `st.session_state.caminho_atual` e `on_click` para navegação profunda (sem cliques mortos).
+2. **Multi-Disco:** Sidebar configurada com unidades `C:`, `D:`, `E:`, `F:`. Troca de unidade dispara reset de GPS.
+3. **Hardware:** `tabs/bra_tab.py` configurada para disparar o Open-Interpreter em janela **PowerShell** dedicada (`-NoExit`).
+4. **Isolamento:** Projeto operando estritamente em `C:\Alana`.
+
+### ⚠️ Diretriz de Continuidade:
+Sempre que retomar, a IA deve validar o estado das variáveis no `sidebar.py` e `nav_tab.py` antes de sugerir mudanças na lógica de arquivos para evitar regressão de navegação.
 
 ---
 *Projeto Original em C:\Alana*
