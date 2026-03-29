@@ -36,7 +36,7 @@ lms server start
 
 Write-Host "Carregando Gemma-3-4B (Modo Otimizado - 16k)..." -ForegroundColor Yellow
 # Carregamento com 16k de contexto para varredura total de drives
-lms load google/gemma-3-4b --context-length 16384 --gpu max
+lms load google/gemma-3-4b --context-length 8192 --gpu max
 
 Write-Host "`nSistema Pronto. Status da GPU:" -ForegroundColor Green
 lms ps
