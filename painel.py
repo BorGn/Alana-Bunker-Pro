@@ -1,3 +1,4 @@
+﻿from tabs import finance_tab
 import streamlit as st
 from core.config import setup_page
 from core.state import init_state
@@ -28,7 +29,7 @@ else:
 sidebar.render()
 
 # 4. Controle de Abas
-aba = st.tabs(["📂 Navegação", "💬 Chat", "🛠️ Administração", "🧬 Entropia"])
+aba = st.tabs(["📂 Navegação", "💬 Chat", "🛠️ Administração", "🧬 Entropia", "💰 Financeiro"])
 
 with aba[0]:
     nav_tab.render()
@@ -41,3 +42,8 @@ with aba[2]:
 
 with aba[3]:
     ent_tab.render()
+
+
+with aba[4]:
+    finance_tab.render()
+

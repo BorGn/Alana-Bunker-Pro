@@ -47,7 +47,7 @@ lms ps
 # BLOCO 02: LANÇAMENTO DA ESTAÇÃO ALANA (AUTO-REPARO)
 # =================================================================
 
-Write-Host "🖥️ Iniciando Estação Alana em /Core..." -ForegroundColor Cyan
+Write-Host "🖥️ Iniciando Estação Alana em..." -ForegroundColor Cyan
 
 Set-Location "C:\Alana"
 
@@ -65,6 +65,6 @@ if (Test-Path "painel.py") {
     Write-Host "🚀 Lançando Estação Alana..." -ForegroundColor Green
     py -3.11 -m streamlit run painel.py
 } else {
-    Write-Host "❌ ERRO CRÍTICO: painel.py não encontrado em C:\Alana\Core!" -ForegroundColor Red
+    Write-Host "❌ ERRO CRÍTICO: painel.py não encontrado em C:\Alana!" -ForegroundColor Red
     pause
 }
