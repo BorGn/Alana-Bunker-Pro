@@ -16,6 +16,14 @@ init_state()
 if "ai_state" not in st.session_state:
     st.session_state.ai_state = "idle"
 
+# 2.5 Verificação de Backend (Hardening de Conexão)
+if not functions.check_server():
+    st.error("🚨 **BACKEND DESCONECTADO:** LM Studio não detectado na porta 1234. O Chat estará inativo.")
+    if st.button("🔄 Tentar Reconexão"):
+        st.rerun()
+else:
+    st.toast("✅ Backend Conectado", icon="🛡️")
+
 # 3. Renderiza a Sidebar (com avatar)
 sidebar.render()
 

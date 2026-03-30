@@ -1,6 +1,14 @@
 print("functions.py foi carregado!")
 
-import os, string
+import os, string, socket
+
+def check_server(host="localhost", port=1234):
+    """Verifica se o servidor de IA (LM Studio/Ollama) está ativo na porta especificada."""
+    try:
+        with socket.create_connection((host, port), timeout=1):
+            return True
+    except (socket.timeout, ConnectionRefusedError, OSError):
+        return False
 
 def detectar_drives():
     """Recupera unidades físicas (C, D, E, F)"""
