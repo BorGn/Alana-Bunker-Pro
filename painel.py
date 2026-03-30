@@ -2,7 +2,7 @@ import streamlit as st
 from core.config import setup_page
 from core.state import init_state
 import sidebar
-
+from core import functions
 from tabs import nav_tab
 from tabs import chat_tab
 from tabs import bra_tab

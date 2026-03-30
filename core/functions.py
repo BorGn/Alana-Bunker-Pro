@@ -1,3 +1,5 @@
+print("functions.py foi carregado!")
+
 import os, string
 
 def detectar_drives():
