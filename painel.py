@@ -44,6 +44,4 @@ with aba[3]:
     ent_tab.render()
 
 
-#with aba[4]:
-   #finance_tab.render()
 
