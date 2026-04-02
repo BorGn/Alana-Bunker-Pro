@@ -1,5 +1,4 @@
-﻿#from tabs import finance_tab
-import streamlit as st
+﻿import streamlit as st
 from core.config import setup_page
 from core.state import init_state
 import sidebar
