@@ -1,20 +1,33 @@
 import streamlit as st
+from core.functions import detectar_drives
 
+def update_state(state):
+    """Garante que a função tenha corpo para não quebrar a compilação."""
+    st.session_state.ai_state = state
+
+def render_sidebar():
+    """Esta função PRECISA estar no nível 0 de indentação."""
+    with st.sidebar:
+        st.title("🛡️ Alana Bunker")
 def init_state():
     """Inicializa as variáveis de estado global do Bunker."""
     
-    # Histórico do Chat (Fundamental para a aba chat_tab)
+    # --- Mantendo seu código original ---
     if "messages" not in st.session_state:
         st.session_state.messages = []
-
-    # Configurações da Alana (Selecionadas no sidebar)
     if "alana_model" not in st.session_state:
         st.session_state.alana_model = "Analista Técnica"
-
-    # Controle de Autenticação/Status
     if "bunker_unlocked" not in st.session_state:
         st.session_state.bunker_unlocked = False
-
-    # Diretrizes do Core (Cache para não ler o TXT toda hora)
     if "core_rules" not in st.session_state:
         st.session_state.core_rules = ""
+
+    # --- INJETANDO SEGURANÇA DE HARDWARE ---
+    if "hardware_busy" not in st.session_state:
+        st.session_state.hardware_busy = False
+    if "cleaning_vram" not in st.session_state:
+        st.session_state.cleaning_vram = False
+    if "current_pid" not in st.session_state:
+        st.session_state.current_pid = None
+    if "ai_state" not in st.session_state:
+        st.session_state.ai_state = "idle"

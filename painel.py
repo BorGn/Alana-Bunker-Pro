@@ -26,7 +26,6 @@ else:
 
 # 3. Renderiza a Sidebar (com avatar)
 sidebar.render()
-
 # 4. Controle de Abas
 aba = st.tabs(["📂 Navegação", "💬 Chat", "🛠️ Administração", "🧬 Entropia"])
 
