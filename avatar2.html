@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; background: transparent; }
+        #container { width: 100vw; height: 100vh; position: relative; }
+        canvas { display: block; }
+
+        /* HUD de estado sobreposto ao canvas */
+        #state-badge {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-family: 'Courier New', monospace;
+            font-size: 9px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            padding: 3px 10px;
+            border-radius: 20px;
+            border: 1px solid currentColor;
+            transition: all 0.6s ease;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        #state-badge.idle      { color: #00ffcc; border-color: #00ffcc44; background: #00ffcc11; }
+        #state-badge.busy      { color: #ffaa00; border-color: #ffaa0044; background: #ffaa0011; }
+        #state-badge.emergency { color: #ff4455; border-color: #ff445544; background: #ff445511; }
+    </style>
+</head>
+<body>
+<div id="container">
+    <div id="state-badge" class="idle">● IDLE</div>
+</div>
+<script>
+// ─── CONFIGURAÇÃO ───────────────────────────────────────────────
+const FPS      = 24;
+const INTERVAL = 1000 / FPS;
+
+const STATES = {
+    idle: {
+        color:      new THREE.Color(0x00ffcc),
+        glowColor:  new THREE.Color(0x00ffcc),
+        rimColor:   new THREE.Color(0x004433),
+        floatSpeed: 0.4,
+        floatAmp:   0.06,
+        scanSpeed:  0.3,
+        label:      '● IDLE',
+        cssClass:   'idle',
+    },
+    busy: {
+        color:      new THREE.Color(0xffaa00),
+        glowColor:  new THREE.Color(0xff6600),
+        rimColor:   new THREE.Color(0x442200),
+        floatSpeed: 1.2,
+        floatAmp:   0.12,
+        scanSpeed:  1.8,
+        label:      '◈ PROCESSANDO',
+        cssClass:   'busy',
+    },
+    emergency: {
+        color:      new THREE.Color(0xff4455),
+        glowColor:  new THREE.Color(0xff0022),
+        rimColor:   new THREE.Color(0x440011),
+        floatSpeed: 2.5,
+        floatAmp:   0.04,
+        scanSpeed:  3.5,
+        label:      '⚠ ALERTA CRÍTICO',
+        cssClass:   'emergency',
+    },
+};
+
+// ─── ESTADO GLOBAL ──────────────────────────────────────────────
+let currentState = 'idle';
+
+// Recupera estado persistido (sobrevive a reruns onde o iframe é remontado)
+try {
+    const saved = sessionStorage.getItem('alana_state');
+    if (saved && STATES[saved]) currentState = saved;
+} catch (_) {}
+
+// ─── CENA THREE.JS ──────────────────────────────────────────────
+let scene, camera, renderer, clock;
+let planeMesh, rimMesh, scanLine;
+let particles, particlePositions, particleVelocities;
+let then = Date.now();
+
+// Shader do plano principal — imagem com vinheta e rim light colorido
+const planeVert = `
+varying vec2 vUv;
+void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`;
+
+const planeFrag = `
+uniform sampler2D uTexture;
+uniform vec3      uRimColor;
+uniform float     uTime;
+uniform float     uScanPos;   // 0..1 posição da linha de scan
+uniform float     uScanSpeed; // intensidade do brilho no scan
+varying vec2 vUv;
+
+void main() {
+    vec4 tex = texture2D(uTexture, vUv);
+
+    // Vinheta oval
+    vec2 uv2 = vUv * 2.0 - 1.0;
+    float vignette = 1.0 - dot(uv2 * vec2(0.65, 0.75), uv2 * vec2(0.65, 0.75));
+    vignette = smoothstep(0.0, 1.0, vignette);
+
+    // Rim light — brilho nas bordas com a cor do estado
+    float rim = 1.0 - vignette;
+    rim = pow(rim, 2.5);
+    vec3 color = tex.rgb * vignette;
+    color += uRimColor * rim * 1.6;
+
+    // Scan line sutil (passa de cima pra baixo)
+    float scanDist = abs(vUv.y - uScanPos);
+    float scanGlow = exp(-scanDist * 80.0) * 0.18 * uScanSpeed;
+    color += vec3(scanGlow);
+
+    // Leve dessaturação para integrar com a paleta
+    float luma = dot(color, vec3(0.299, 0.587, 0.114));
+    color = mix(vec3(luma), color, 0.82);
+
+    gl_FragColor = vec4(color, tex.a * vignette);
+}`;
+
+// Shader das partículas
+const partVert = `
+attribute float aSize;
+attribute float aAlpha;
+uniform float uTime;
+varying float vAlpha;
+void main() {
+    vAlpha = aAlpha;
+    vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+    gl_PointSize = aSize * (280.0 / -mvPos.z);
+    gl_Position  = projectionMatrix * mvPos;
+}`;
+
+const partFrag = `
+uniform vec3 uColor;
+varying float vAlpha;
+void main() {
+    float d = length(gl_PointCoord - vec2(0.5));
+    if (d > 0.5) discard;
+    float alpha = (1.0 - d * 2.0) * vAlpha;
+    gl_FragColor = vec4(uColor, alpha * 0.85);
+}`;
+
+function buildScene() {
+    scene    = new THREE.Scene();
+    clock    = new THREE.Clock();
+    camera   = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+    camera.position.set(0, 0, 3.2);
+
+    renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    renderer.setClearColor(0x000000, 0);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    document.getElementById('container').prepend(renderer.domElement);
+    resize();
+
+    // ── PLANO PRINCIPAL com imagem ──────────────────────────────
+    const aspect = 1152 / 832; // aprox. da imagem original (paisagem 3:2)
+    const planeH = 2.4;
+    const planeW = planeH * (832 / 1152); // retrato, rosto preenche
+
+    const geo = new THREE.PlaneGeometry(planeW, planeH, 1, 1);
+
+    // Carrega a imagem inline via base64 se estiver no Streamlit,
+    // ou por caminho relativo em dev. Tentamos o relativo primeiro.
+    const loader = new THREE.TextureLoader();
+    loader.load(
+        'Alana_Android.png',
+        (texture) => initPlane(geo, texture, planeW, planeH),
+        undefined,
+        () => {
+            // Fallback: tenta o caminho típico do Streamlit
+            loader.load(
+                './static/Alana_Android.png',
+                (texture) => initPlane(geo, texture, planeW, planeH),
+                undefined,
+                () => initPlane(geo, null, planeW, planeH) // sem imagem
+            );
+        }
+    );
+
+    buildParticles();
+}
+
+function initPlane(geo, texture, planeW, planeH) {
+    const cfg = STATES[currentState];
+
+    const mat = new THREE.ShaderMaterial({
+        uniforms: {
+            uTexture:   { value: texture ?? new THREE.Texture() },
+            uRimColor:  { value: cfg.rimColor.clone() },
+            uTime:      { value: 0 },
+            uScanPos:   { value: 0.5 },
+            uScanSpeed: { value: cfg.scanSpeed },
+        },
+        vertexShader:   planeVert,
+        fragmentShader: planeFrag,
+        transparent:    true,
+        side:           THREE.FrontSide,
+    });
+
+    // Fallback visual se não houver imagem
+    if (!texture) {
+        mat.uniforms.uTexture.value = buildFallbackTexture();
+    }
+
+    planeMesh = new THREE.Mesh(geo, mat);
+    scene.add(planeMesh);
+
+    // Borda luminosa (rim wireframe sutil)
+    const rimGeo = new THREE.PlaneGeometry(planeW + 0.04, planeH + 0.04);
+    const rimMat = new THREE.MeshBasicMaterial({
+        color:       cfg.color,
+        wireframe:   true,
+        transparent: true,
+        opacity:     0.12,
+    });
+    rimMesh = new THREE.Mesh(rimGeo, rimMat);
+    rimMesh.position.z = -0.01;
+    scene.add(rimMesh);
+}
+
+// Textura de fallback: gradiente cyan escuro se imagem não carregar
+function buildFallbackTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+    const g = ctx.createLinearGradient(0, 0, 0, 256);
+    g.addColorStop(0,   '#001a15');
+    g.addColorStop(0.5, '#003328');
+    g.addColorStop(1,   '#000d0a');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 256, 256);
+    ctx.fillStyle = '#00ffcc33';
+    ctx.beginPath();
+    ctx.arc(128, 100, 60, 0, Math.PI * 2);
+    ctx.fill();
+    const tex = new THREE.CanvasTexture(canvas);
+    return tex;
+}
+
+function buildParticles() {
+    const COUNT = 120;
+    const positions  = new Float32Array(COUNT * 3);
+    const sizes      = new Float32Array(COUNT);
+    const alphas     = new Float32Array(COUNT);
+    particleVelocities = [];
+
+    for (let i = 0; i < COUNT; i++) {
+        const r   = 0.65 + Math.random() * 0.7;
+        const phi = Math.random() * Math.PI * 2;
+        const thy = (Math.random() - 0.5) * Math.PI;
+        positions[i * 3]     = r * Math.cos(phi) * Math.cos(thy);
+        positions[i * 3 + 1] = r * Math.sin(thy) * 1.3;
+        positions[i * 3 + 2] = (Math.random() - 0.5) * 0.4;
+        sizes[i]  = 0.8 + Math.random() * 2.2;
+        alphas[i] = 0.1 + Math.random() * 0.5;
+        particleVelocities.push({
+            phi:   phi,
+            r:     r,
+            thy:   thy,
+            speed: (Math.random() - 0.5) * 0.004,
+            drift: (Math.random() - 0.5) * 0.002,
+        });
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('aSize',    new THREE.BufferAttribute(sizes, 1));
+    geo.setAttribute('aAlpha',   new THREE.BufferAttribute(alphas, 1));
+    particlePositions = positions;
+
+    const mat = new THREE.ShaderMaterial({
+        uniforms: {
+            uColor: { value: STATES[currentState].color.clone() },
+        },
+        vertexShader:   partVert,
+        fragmentShader: partFrag,
+        transparent:    true,
+        depthWrite:     false,
+        blending:       THREE.AdditiveBlending,
+    });
+
+    particles = new THREE.Points(geo, mat);
+    scene.add(particles);
+}
+
+// ─── APLICAR ESTADO ─────────────────────────────────────────────
+function applyState(state) {
+    if (!STATES[state]) return;
+    currentState = state;
+
+    try { sessionStorage.setItem('alana_state', state); } catch (_) {}
+
+    const cfg = STATES[state];
+
+    // Atualiza badge HUD
+    const badge = document.getElementById('state-badge');
+    badge.textContent  = cfg.label;
+    badge.className    = 'state-badge ' + cfg.cssClass;
+
+    // Atualiza materiais (se os meshes já existirem)
+    if (planeMesh) {
+        planeMesh.material.uniforms.uRimColor.value.copy(cfg.rimColor);
+        planeMesh.material.uniforms.uScanSpeed.value = cfg.scanSpeed;
+    }
+    if (rimMesh) {
+        rimMesh.material.color.copy(cfg.color);
+    }
+    if (particles) {
+        particles.material.uniforms.uColor.value.copy(cfg.color);
+    }
+}
+
+// ─── LOOP DE ANIMAÇÃO ────────────────────────────────────────────
+function animate() {
+    requestAnimationFrame(animate);
+
+    const now     = Date.now();
+    const elapsed = now - then;
+    if (elapsed < INTERVAL) return;
+    then = now - (elapsed % INTERVAL);
+
+    const t   = clock.getElapsedTime();
+    const cfg = STATES[currentState];
+
+    // Flutuação vertical suave
+    if (planeMesh) {
+        planeMesh.position.y = Math.sin(t * cfg.floatSpeed) * cfg.floatAmp;
+        planeMesh.position.x = Math.sin(t * cfg.floatSpeed * 0.4) * (cfg.floatAmp * 0.3);
+        planeMesh.rotation.z = Math.sin(t * cfg.floatSpeed * 0.3) * 0.012;
+
+        // Scan line
+        planeMesh.material.uniforms.uTime.value    = t;
+        planeMesh.material.uniforms.uScanPos.value = (Math.sin(t * 0.6) * 0.5 + 0.5);
+
+        if (rimMesh) {
+            rimMesh.position.copy(planeMesh.position);
+            rimMesh.rotation.copy(planeMesh.rotation);
+            // Pulso de opacidade no rim
+            rimMesh.material.opacity = 0.08 + Math.sin(t * 2.0) * 0.06;
+        }
+    }
+
+    // Partículas orbitando
+    if (particles && particleVelocities) {
+        const pos = particlePositions;
+        for (let i = 0; i < particleVelocities.length; i++) {
+            const v = particleVelocities[i];
+            v.phi += v.speed * cfg.floatSpeed;
+            v.thy += v.drift * cfg.floatSpeed * 0.5;
+            pos[i * 3]     = v.r * Math.cos(v.phi) * Math.cos(v.thy);
+            pos[i * 3 + 1] = v.r * Math.sin(v.thy) * 1.3;
+        }
+        particles.geometry.attributes.position.needsUpdate = true;
+    }
+
+    renderer.render(scene, camera);
+}
+
+// ─── RESIZE ─────────────────────────────────────────────────────
+function resize() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+}
+
+// ─── LISTENER DE ESTADO (Python → JS) ────────────────────────────
+window.addEventListener('message', (event) => {
+    const { type, state } = event.data ?? {};
+    if (type === 'set_state' && STATES[state]) {
+        applyState(state);
+    }
+});
+
+window.addEventListener('resize', resize);
+
+// ─── BOOT ────────────────────────────────────────────────────────
+buildScene();
+animate();
+applyState(currentState); // aplica estado inicial (pode ser do sessionStorage)
+</script>
+</body>
+</html>

@@ -9,7 +9,6 @@
         #container { width: 100vw; height: 100vh; position: relative; }
         canvas { display: block; }
 
-        /* HUD de estado sobreposto ao canvas */
         #state-badge {
             position: absolute;
             bottom: 10px;
@@ -26,6 +25,7 @@
             pointer-events: none;
             white-space: nowrap;
         }
+        /* FIX #1: classes sem prefixo, igual ao CSS original */
         #state-badge.idle      { color: #00ffcc; border-color: #00ffcc44; background: #00ffcc11; }
         #state-badge.busy      { color: #ffaa00; border-color: #ffaa0044; background: #ffaa0011; }
         #state-badge.emergency { color: #ff4455; border-color: #ff445544; background: #ff445511; }
@@ -36,7 +36,6 @@
     <div id="state-badge" class="idle">● IDLE</div>
 </div>
 <script>
-// ─── CONFIGURAÇÃO ───────────────────────────────────────────────
 const FPS      = 24;
 const INTERVAL = 1000 / FPS;
 
@@ -73,22 +72,17 @@ const STATES = {
     },
 };
 
-// ─── ESTADO GLOBAL ──────────────────────────────────────────────
 let currentState = 'idle';
-
-// Recupera estado persistido (sobrevive a reruns onde o iframe é remontado)
 try {
     const saved = sessionStorage.getItem('alana_state');
     if (saved && STATES[saved]) currentState = saved;
 } catch (_) {}
 
-// ─── CENA THREE.JS ──────────────────────────────────────────────
 let scene, camera, renderer, clock;
-let planeMesh, rimMesh, scanLine;
+let planeMesh, rimMesh;
 let particles, particlePositions, particleVelocities;
 let then = Date.now();
 
-// Shader do plano principal — imagem com vinheta e rim light colorido
 const planeVert = `
 varying vec2 vUv;
 void main() {
@@ -100,37 +94,27 @@ const planeFrag = `
 uniform sampler2D uTexture;
 uniform vec3      uRimColor;
 uniform float     uTime;
-uniform float     uScanPos;   // 0..1 posição da linha de scan
-uniform float     uScanSpeed; // intensidade do brilho no scan
+uniform float     uScanPos;
+uniform float     uScanSpeed;
 varying vec2 vUv;
 
 void main() {
     vec4 tex = texture2D(uTexture, vUv);
-
-    // Vinheta oval
     vec2 uv2 = vUv * 2.0 - 1.0;
     float vignette = 1.0 - dot(uv2 * vec2(0.65, 0.75), uv2 * vec2(0.65, 0.75));
     vignette = smoothstep(0.0, 1.0, vignette);
-
-    // Rim light — brilho nas bordas com a cor do estado
     float rim = 1.0 - vignette;
     rim = pow(rim, 2.5);
     vec3 color = tex.rgb * vignette;
     color += uRimColor * rim * 1.6;
-
-    // Scan line sutil (passa de cima pra baixo)
     float scanDist = abs(vUv.y - uScanPos);
     float scanGlow = exp(-scanDist * 80.0) * 0.18 * uScanSpeed;
     color += vec3(scanGlow);
-
-    // Leve dessaturação para integrar com a paleta
     float luma = dot(color, vec3(0.299, 0.587, 0.114));
     color = mix(vec3(luma), color, 0.82);
-
     gl_FragColor = vec4(color, tex.a * vignette);
 }`;
 
-// Shader das partículas
 const partVert = `
 attribute float aSize;
 attribute float aAlpha;
@@ -165,28 +149,26 @@ function buildScene() {
     document.getElementById('container').prepend(renderer.domElement);
     resize();
 
-    // ── PLANO PRINCIPAL com imagem ──────────────────────────────
-    const aspect = 1152 / 832; // aprox. da imagem original (paisagem 3:2)
     const planeH = 2.4;
-    const planeW = planeH * (832 / 1152); // retrato, rosto preenche
+    const planeW = planeH * (832 / 1152);
+    const geo    = new THREE.PlaneGeometry(planeW, planeH, 1, 1);
 
-    const geo = new THREE.PlaneGeometry(planeW, planeH, 1, 1);
-
-    // Carrega a imagem inline via base64 se estiver no Streamlit,
-    // ou por caminho relativo em dev. Tentamos o relativo primeiro.
     const loader = new THREE.TextureLoader();
-    loader.load(
-        'Alana_Android.png',
-        (texture) => initPlane(geo, texture, planeW, planeH),
-        undefined,
-        () => {
-            // Fallback: tenta o caminho típico do Streamlit
-            loader.load(
-                './static/Alana_Android.png',
-                (texture) => initPlane(geo, texture, planeW, planeH),
-                undefined,
-                () => initPlane(geo, null, planeW, planeH) // sem imagem
-            );
+
+    // FIX #2: resolve a textura ANTES de criar o material,
+    // garantindo que o uniform sempre tenha um valor válido.
+    // Tenta os dois caminhos em sequência; se ambos falharem usa fallback.
+    const tryLoad = (paths, onReady) => {
+        if (paths.length === 0) { onReady(null); return; }
+        loader.load(paths[0], onReady, undefined, () => tryLoad(paths.slice(1), onReady));
+    };
+
+    tryLoad(
+        ['Alana_Android.png', './static/Alana_Android.png'],
+        (texture) => {
+            // texture é null se nenhum path funcionou
+            const resolvedTexture = texture ?? buildFallbackTexture();
+            initPlane(geo, resolvedTexture, planeW, planeH);
         }
     );
 
@@ -198,7 +180,7 @@ function initPlane(geo, texture, planeW, planeH) {
 
     const mat = new THREE.ShaderMaterial({
         uniforms: {
-            uTexture:   { value: texture ?? new THREE.Texture() },
+            uTexture:   { value: texture },   // sempre tem textura válida agora
             uRimColor:  { value: cfg.rimColor.clone() },
             uTime:      { value: 0 },
             uScanPos:   { value: 0.5 },
@@ -210,15 +192,9 @@ function initPlane(geo, texture, planeW, planeH) {
         side:           THREE.FrontSide,
     });
 
-    // Fallback visual se não houver imagem
-    if (!texture) {
-        mat.uniforms.uTexture.value = buildFallbackTexture();
-    }
-
     planeMesh = new THREE.Mesh(geo, mat);
     scene.add(planeMesh);
 
-    // Borda luminosa (rim wireframe sutil)
     const rimGeo = new THREE.PlaneGeometry(planeW + 0.04, planeH + 0.04);
     const rimMat = new THREE.MeshBasicMaterial({
         color:       cfg.color,
@@ -231,7 +207,6 @@ function initPlane(geo, texture, planeW, planeH) {
     scene.add(rimMesh);
 }
 
-// Textura de fallback: gradiente cyan escuro se imagem não carregar
 function buildFallbackTexture() {
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = 256;
@@ -246,8 +221,7 @@ function buildFallbackTexture() {
     ctx.beginPath();
     ctx.arc(128, 100, 60, 0, Math.PI * 2);
     ctx.fill();
-    const tex = new THREE.CanvasTexture(canvas);
-    return tex;
+    return new THREE.CanvasTexture(canvas);
 }
 
 function buildParticles() {
@@ -296,37 +270,28 @@ function buildParticles() {
     scene.add(particles);
 }
 
-// ─── APLICAR ESTADO ─────────────────────────────────────────────
 function applyState(state) {
     if (!STATES[state]) return;
     currentState = state;
-
     try { sessionStorage.setItem('alana_state', state); } catch (_) {}
 
     const cfg = STATES[state];
 
-    // Atualiza badge HUD
     const badge = document.getElementById('state-badge');
-    badge.textContent  = cfg.label;
-    badge.className    = 'state-badge ' + cfg.cssClass;
+    badge.textContent = cfg.label;
+    // FIX #1: apenas cssClass, sem prefixo extra
+    badge.className   = cfg.cssClass;
 
-    // Atualiza materiais (se os meshes já existirem)
     if (planeMesh) {
         planeMesh.material.uniforms.uRimColor.value.copy(cfg.rimColor);
         planeMesh.material.uniforms.uScanSpeed.value = cfg.scanSpeed;
     }
-    if (rimMesh) {
-        rimMesh.material.color.copy(cfg.color);
-    }
-    if (particles) {
-        particles.material.uniforms.uColor.value.copy(cfg.color);
-    }
+    if (rimMesh)   rimMesh.material.color.copy(cfg.color);
+    if (particles) particles.material.uniforms.uColor.value.copy(cfg.color);
 }
 
-// ─── LOOP DE ANIMAÇÃO ────────────────────────────────────────────
 function animate() {
     requestAnimationFrame(animate);
-
     const now     = Date.now();
     const elapsed = now - then;
     if (elapsed < INTERVAL) return;
@@ -335,25 +300,20 @@ function animate() {
     const t   = clock.getElapsedTime();
     const cfg = STATES[currentState];
 
-    // Flutuação vertical suave
     if (planeMesh) {
         planeMesh.position.y = Math.sin(t * cfg.floatSpeed) * cfg.floatAmp;
         planeMesh.position.x = Math.sin(t * cfg.floatSpeed * 0.4) * (cfg.floatAmp * 0.3);
         planeMesh.rotation.z = Math.sin(t * cfg.floatSpeed * 0.3) * 0.012;
-
-        // Scan line
         planeMesh.material.uniforms.uTime.value    = t;
         planeMesh.material.uniforms.uScanPos.value = (Math.sin(t * 0.6) * 0.5 + 0.5);
 
         if (rimMesh) {
             rimMesh.position.copy(planeMesh.position);
             rimMesh.rotation.copy(planeMesh.rotation);
-            // Pulso de opacidade no rim
             rimMesh.material.opacity = 0.08 + Math.sin(t * 2.0) * 0.06;
         }
     }
 
-    // Partículas orbitando
     if (particles && particleVelocities) {
         const pos = particlePositions;
         for (let i = 0; i < particleVelocities.length; i++) {
@@ -369,7 +329,6 @@ function animate() {
     renderer.render(scene, camera);
 }
 
-// ─── RESIZE ─────────────────────────────────────────────────────
 function resize() {
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -378,20 +337,16 @@ function resize() {
     renderer.setSize(w, h);
 }
 
-// ─── LISTENER DE ESTADO (Python → JS) ────────────────────────────
 window.addEventListener('message', (event) => {
     const { type, state } = event.data ?? {};
-    if (type === 'set_state' && STATES[state]) {
-        applyState(state);
-    }
+    if (type === 'set_state' && STATES[state]) applyState(state);
 });
 
 window.addEventListener('resize', resize);
 
-// ─── BOOT ────────────────────────────────────────────────────────
 buildScene();
 animate();
-applyState(currentState); // aplica estado inicial (pode ser do sessionStorage)
+applyState(currentState);
 </script>
 </body>
 </html>
